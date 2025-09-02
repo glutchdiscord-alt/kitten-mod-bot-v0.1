@@ -40,7 +40,12 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return  # Ignore command not found errors
     
-    elif isinstance(error, commands.MissingPermissions):
+    # Check if error has already been handled
+    if hasattr(ctx, '_error_handled'):
+        return
+    ctx._error_handled = True
+    
+    if isinstance(error, commands.MissingPermissions):
         embed = discord.Embed(
             title="🐱 Meow! No Permission",
             description="Sorry, but you don't have the right permissions to use this command! Only moderators can help me keep things purrfect.",
@@ -158,6 +163,9 @@ async def load_cogs():
     cogs = ['cogs.moderation', 'cogs.fun', 'cogs.advanced_mod', 'cogs.welcome', 'cogs.utility']
     for cog in cogs:
         try:
+            # Unload if already loaded to prevent duplicates
+            if cog in bot.extensions:
+                await bot.unload_extension(cog)
             await bot.load_extension(cog)
             logger.info(f"Loaded {cog}")
         except Exception as e:
