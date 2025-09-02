@@ -312,6 +312,11 @@ class WelcomeCog(commands.Cog):
         """Handle new member events"""
         guild_id = member.guild.id
         
+        # Prevent duplicate processing
+        if hasattr(member, '_kitten_mod_processed'):
+            return
+        member._kitten_mod_processed = True
+        
         # Send welcome message
         if guild_id in self.welcome_settings:
             await self._send_welcome_message(member.guild, member)
