@@ -15,8 +15,21 @@ intents.message_content = True
 intents.members = True
 intents.guilds = True
 
+# Dynamic prefix function
+def get_prefix(bot, message):
+    """Get the prefix for the current guild"""
+    if message.guild is None:
+        return BOT_CONFIG['prefix']  # Default prefix for DMs
+    
+    # Try to get utility cog to access guild_prefixes
+    utility_cog = bot.get_cog('UtilityCog')
+    if utility_cog and hasattr(utility_cog, 'guild_prefixes'):
+        return utility_cog.guild_prefixes.get(message.guild.id, BOT_CONFIG['prefix'])
+    
+    return BOT_CONFIG['prefix']  # Fallback to default
+
 bot = commands.Bot(
-    command_prefix=BOT_CONFIG['prefix'],
+    command_prefix=get_prefix,
     intents=intents,
     help_command=None
 )
@@ -163,11 +176,12 @@ async def load_cogs():
     cogs = ['cogs.moderation', 'cogs.fun', 'cogs.advanced_mod', 'cogs.welcome', 'cogs.utility']
     for cog in cogs:
         try:
-            # Unload if already loaded to prevent duplicates
-            if cog in bot.extensions:
-                await bot.unload_extension(cog)
-            await bot.load_extension(cog)
-            logger.info(f"Loaded {cog}")
+            # Only load if not already loaded to prevent duplicates
+            if cog not in bot.extensions:
+                await bot.load_extension(cog)
+                logger.info(f"Loaded {cog}")
+            else:
+                logger.info(f"{cog} already loaded, skipping")
         except Exception as e:
             logger.error(f"Failed to load {cog}: {e}")
 
