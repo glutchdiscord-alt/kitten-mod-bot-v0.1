@@ -348,8 +348,8 @@ class UtilityCog(commands.Cog):
         """Change the bot's command prefix for this server"""
         
         if new_prefix is None:
-            # Show current prefix
-            current_prefix = self.guild_prefixes.get(ctx.guild.id, self.bot.command_prefix)
+            # Show current prefix - get the actual prefix value
+            current_prefix = self.guild_prefixes.get(ctx.guild.id, "!")
             embed = discord.Embed(
                 title="🐱 Current Prefix",
                 description=f"Meow! My current prefix in this server is: **{current_prefix}**\n\nTo change it, use: `{current_prefix}prefix <new_prefix>` 🐾",
