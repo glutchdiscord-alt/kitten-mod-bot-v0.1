@@ -10,6 +10,7 @@ class WelcomeCog(commands.Cog):
         self.welcome_settings = {}  # Guild settings for welcome messages
         self.goodbye_settings = {}  # Guild settings for goodbye messages
         self.autorole_settings = {}  # Guild settings for autoroles
+        self.processed_members = set()  # Track processed member joins to prevent duplicates
     
     @commands.command(name='welcome')
     @commands.has_permissions(administrator=True)
@@ -311,11 +312,19 @@ class WelcomeCog(commands.Cog):
     async def on_member_join(self, member):
         """Handle new member events"""
         guild_id = member.guild.id
+        member_key = f"{guild_id}_{member.id}_{int(member.joined_at.timestamp()) if member.joined_at else 0}"
         
-        # Prevent duplicate processing
-        if hasattr(member, '_kitten_mod_processed'):
+        # Prevent duplicate processing with more robust tracking
+        if member_key in self.processed_members:
             return
-        member._kitten_mod_processed = True
+        self.processed_members.add(member_key)
+        
+        # Clean old entries to prevent memory issues (keep last 1000 entries)
+        if len(self.processed_members) > 1000:
+            # Remove oldest 500 entries
+            old_entries = list(self.processed_members)[:500]
+            for entry in old_entries:
+                self.processed_members.discard(entry)
         
         # Send welcome message
         if guild_id in self.welcome_settings:
