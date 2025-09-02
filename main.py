@@ -9,30 +9,46 @@ from aiohttp import web
 # Setup logging
 logger = setup_logging()
 
+# Global variables
+guild_prefixes = {}
+processed_commands = set()
+
+# Dynamic prefix function
+def get_prefix(bot, message):
+    """Get the prefix for the current guild"""
+    if message.guild is None:
+        return BOT_CONFIG['prefix']
+    return guild_prefixes.get(message.guild.id, BOT_CONFIG['prefix'])
+
 # Bot setup with intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
 
-# Dynamic prefix function
-def get_prefix(bot, message):
-    """Get the prefix for the current guild"""
-    if message.guild is None:
-        return BOT_CONFIG['prefix']  # Default prefix for DMs
-    
-    # Try to get utility cog to access guild_prefixes
-    utility_cog = bot.get_cog('UtilityCog')
-    if utility_cog and hasattr(utility_cog, 'guild_prefixes'):
-        return utility_cog.guild_prefixes.get(message.guild.id, BOT_CONFIG['prefix'])
-    
-    return BOT_CONFIG['prefix']  # Fallback to default
-
+# Create bot instance
 bot = commands.Bot(
     command_prefix=get_prefix,
     intents=intents,
-    help_command=None
+    help_command=None,
+    case_insensitive=True
 )
+
+@bot.before_invoke
+async def before_any_command(ctx):
+    """Prevent duplicate command execution"""
+    command_key = f"{ctx.message.id}_{ctx.command.name}_{ctx.author.id}"
+    
+    if command_key in processed_commands:
+        raise commands.CommandError("Duplicate command prevented")
+    
+    processed_commands.add(command_key)
+    
+    # Clean old entries to prevent memory issues
+    if len(processed_commands) > 1000:
+        old_entries = list(processed_commands)[:500]
+        for entry in old_entries:
+            processed_commands.discard(entry)
 
 @bot.event
 async def on_ready():
@@ -51,12 +67,16 @@ async def on_ready():
 async def on_command_error(ctx, error):
     """Global error handler"""
     if isinstance(error, commands.CommandNotFound):
-        return  # Ignore command not found errors
+        return
     
-    # Check if error has already been handled
+    # Prevent duplicate error handling
     if hasattr(ctx, '_error_handled'):
         return
     ctx._error_handled = True
+    
+    # Skip our duplicate prevention errors
+    if isinstance(error, commands.CommandError) and "Duplicate command prevented" in str(error):
+        return
     
     if isinstance(error, commands.MissingPermissions):
         embed = discord.Embed(
@@ -64,7 +84,6 @@ async def on_command_error(ctx, error):
             description="Sorry, but you don't have the right permissions to use this command! Only moderators can help me keep things purrfect.",
             color=discord.Color.from_rgb(255, 182, 193)
         )
-        # Cute kitten thumbnail would go here
         await ctx.send(embed=embed)
     
     elif isinstance(error, commands.MissingRequiredArgument):
@@ -73,7 +92,6 @@ async def on_command_error(ctx, error):
             description=f"Meow! I need more information. You forgot to tell me: `{error.param}`",
             color=discord.Color.from_rgb(255, 182, 193)
         )
-        # Cute kitten thumbnail would go here
         await ctx.send(embed=embed)
     
     elif isinstance(error, commands.BadArgument):
@@ -82,7 +100,6 @@ async def on_command_error(ctx, error):
             description="Meow! Something you typed doesn't look quite right. Could you check what you entered?",
             color=discord.Color.from_rgb(255, 182, 193)
         )
-        # Cute kitten thumbnail would go here
         await ctx.send(embed=embed)
     
     else:
@@ -92,7 +109,6 @@ async def on_command_error(ctx, error):
             description="Meow! Something unexpected happened and I got a bit confused. Could you try that again?",
             color=discord.Color.from_rgb(255, 182, 193)
         )
-        # Cute kitten thumbnail would go here
         await ctx.send(embed=embed)
 
 @bot.command(name='help')
@@ -103,7 +119,6 @@ async def help_command(ctx):
         description="Meow! Here are all my cute commands to keep your server safe and cozy! 🐾",
         color=discord.Color.from_rgb(255, 192, 203)
     )
-    embed.set_thumbnail(url="attachment://IMG_0229_1756759800418.jpeg")
     
     embed.add_field(
         name="🐾 Kitten's Moderation Powers",
@@ -157,6 +172,13 @@ async def help_command(ctx):
     )
     
     embed.add_field(
+        name="⚙️ Bot Settings",
+        value=f"`{BOT_CONFIG['prefix']}prefix` - Show current prefix\n"
+              f"`{BOT_CONFIG['prefix']}prefix <new>` - Change bot prefix 🔧",
+        inline=False
+    )
+    
+    embed.add_field(
         name="✨ Extra Fun",
         value=f"`{BOT_CONFIG['prefix']}8ball <question>` - Ask the magic kitten 🔮\n"
               f"`{BOT_CONFIG['prefix']}compliment [user]` - Send sweet words 💕",
@@ -171,19 +193,66 @@ async def help_command(ctx):
     
     await ctx.send(embed=embed)
 
+@bot.command(name='prefix')
+@commands.has_permissions(administrator=True)
+async def change_prefix(ctx, *, new_prefix = None):
+    """Change the bot's command prefix for this server"""
+    global guild_prefixes
+    
+    if new_prefix is None:
+        # Show current prefix
+        current_prefix = guild_prefixes.get(ctx.guild.id, BOT_CONFIG['prefix'])
+        embed = discord.Embed(
+            title="🐱 Current Prefix",
+            description=f"Meow! My current prefix in this server is: **{current_prefix}**\n\nTo change it, use: `{current_prefix}prefix <new_prefix>` 🐾",
+            color=discord.Color.from_rgb(255, 192, 203)
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    # Validate new prefix
+    if len(new_prefix) > 5:
+        embed = discord.Embed(
+            title="🐱 Prefix Too Long",
+            description="Meow! Please use a prefix that's 5 characters or shorter! 🐾",
+            color=discord.Color.from_rgb(255, 182, 193)
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    if any(char in new_prefix for char in [' ', '\n', '\t']):
+        embed = discord.Embed(
+            title="🐱 Invalid Characters",
+            description="Meow! Prefixes can't contain spaces or special whitespace characters! 🐾",
+            color=discord.Color.from_rgb(255, 182, 193)
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    # Store the new prefix for this guild
+    old_prefix = guild_prefixes.get(ctx.guild.id, BOT_CONFIG['prefix'])
+    guild_prefixes[ctx.guild.id] = new_prefix
+    
+    embed = discord.Embed(
+        title="🐱 Prefix Changed!",
+        description=f"Meow! I've changed my prefix from **{old_prefix}** to **{new_prefix}**!\n\nNow use commands like: `{new_prefix}help` 🐾✨",
+        color=discord.Color.from_rgb(144, 238, 144)
+    )
+    await ctx.send(embed=embed)
+
 async def load_cogs():
-    """Load all cog files"""
-    cogs = ['cogs.moderation', 'cogs.fun', 'cogs.advanced_mod', 'cogs.welcome', 'cogs.utility']
-    
-    # First, unload all existing cogs to prevent any duplicates
-    for extension_name in list(bot.extensions.keys()):
+    """Load all cog files with proper cleanup"""
+    # Clear all existing extensions first
+    extensions_to_remove = list(bot.extensions.keys())
+    for extension in extensions_to_remove:
         try:
-            await bot.unload_extension(extension_name)
-            logger.info(f"Unloaded {extension_name}")
+            await bot.unload_extension(extension)
+            logger.info(f"Unloaded {extension}")
         except Exception as e:
-            logger.error(f"Failed to unload {extension_name}: {e}")
+            logger.error(f"Failed to unload {extension}: {e}")
     
-    # Now load fresh cogs
+    # Load fresh cogs
+    cogs = ['cogs.moderation', 'cogs.fun', 'cogs.advanced_mod', 'cogs.welcome', 'cogs.utility']
     for cog in cogs:
         try:
             await bot.load_extension(cog)
@@ -197,12 +266,6 @@ async def health_check(request):
 
 async def main():
     """Main function to start the bot"""
-    # Prevent multiple instances
-    if hasattr(bot, '_is_running'):
-        logger.warning("Bot is already running, skipping duplicate start")
-        return
-    bot._is_running = True
-    
     async with bot:
         await load_cogs()
         
