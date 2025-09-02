@@ -4,6 +4,7 @@ import random
 import asyncio
 from datetime import datetime, timedelta
 import re
+from typing import Optional
 
 class UtilityCog(commands.Cog):
     """Utility commands for Kitten Mod"""
@@ -12,6 +13,7 @@ class UtilityCog(commands.Cog):
         self.bot = bot
         self.reminders = {}  # Store active reminders
         self.polls = {}  # Store active polls
+        self.guild_prefixes = {}  # Store custom prefixes per guild
         
         # 8ball responses
         self.eightball_responses = [
@@ -298,7 +300,7 @@ class UtilityCog(commands.Cog):
         await msg.edit(embed=embed)
     
     @commands.command(name='compliment')
-    async def give_compliment(self, ctx, member: discord.Member = None):
+    async def give_compliment(self, ctx, member: Optional[discord.Member] = None):
         """Send an adorable compliment to someone (or yourself!)"""
         
         target_member = member if member is not None else ctx.author
@@ -339,6 +341,52 @@ class UtilityCog(commands.Cog):
             await msg.add_reaction("💕")
         except:
             pass
+    
+    @commands.command(name='prefix')
+    @commands.has_permissions(administrator=True)
+    async def change_prefix(self, ctx, new_prefix: Optional[str] = None):
+        """Change the bot's command prefix for this server"""
+        
+        if new_prefix is None:
+            # Show current prefix
+            current_prefix = self.guild_prefixes.get(ctx.guild.id, self.bot.command_prefix)
+            embed = discord.Embed(
+                title="🐱 Current Prefix",
+                description=f"Meow! My current prefix in this server is: **{current_prefix}**\n\nTo change it, use: `{current_prefix}prefix <new_prefix>` 🐾",
+                color=discord.Color.from_rgb(255, 192, 203)
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        # Validate new prefix
+        if len(new_prefix) > 5:
+            embed = discord.Embed(
+                title="🐱 Prefix Too Long",
+                description="Meow! Please use a prefix that's 5 characters or shorter! 🐾",
+                color=discord.Color.from_rgb(255, 182, 193)
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        if any(char in new_prefix for char in [' ', '\n', '\t']):
+            embed = discord.Embed(
+                title="🐱 Invalid Characters",
+                description="Meow! Prefixes can't contain spaces or special whitespace characters! 🐾",
+                color=discord.Color.from_rgb(255, 182, 193)
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        # Store the new prefix for this guild
+        old_prefix = self.guild_prefixes.get(ctx.guild.id, self.bot.command_prefix)
+        self.guild_prefixes[ctx.guild.id] = new_prefix
+        
+        embed = discord.Embed(
+            title="🐱 Prefix Changed!",
+            description=f"Meow! I've changed my prefix from **{old_prefix}** to **{new_prefix}**!\n\nNow use commands like: `{new_prefix}help` 🐾✨",
+            color=discord.Color.from_rgb(144, 238, 144)
+        )
+        await ctx.send(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(UtilityCog(bot))
