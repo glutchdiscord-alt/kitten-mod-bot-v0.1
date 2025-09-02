@@ -174,14 +174,20 @@ async def help_command(ctx):
 async def load_cogs():
     """Load all cog files"""
     cogs = ['cogs.moderation', 'cogs.fun', 'cogs.advanced_mod', 'cogs.welcome', 'cogs.utility']
+    
+    # First, unload all existing cogs to prevent any duplicates
+    for extension_name in list(bot.extensions.keys()):
+        try:
+            await bot.unload_extension(extension_name)
+            logger.info(f"Unloaded {extension_name}")
+        except Exception as e:
+            logger.error(f"Failed to unload {extension_name}: {e}")
+    
+    # Now load fresh cogs
     for cog in cogs:
         try:
-            # Only load if not already loaded to prevent duplicates
-            if cog not in bot.extensions:
-                await bot.load_extension(cog)
-                logger.info(f"Loaded {cog}")
-            else:
-                logger.info(f"{cog} already loaded, skipping")
+            await bot.load_extension(cog)
+            logger.info(f"Loaded {cog}")
         except Exception as e:
             logger.error(f"Failed to load {cog}: {e}")
 
@@ -191,6 +197,12 @@ async def health_check(request):
 
 async def main():
     """Main function to start the bot"""
+    # Prevent multiple instances
+    if hasattr(bot, '_is_running'):
+        logger.warning("Bot is already running, skipping duplicate start")
+        return
+    bot._is_running = True
+    
     async with bot:
         await load_cogs()
         
